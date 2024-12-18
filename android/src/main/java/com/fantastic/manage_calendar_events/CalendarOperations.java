@@ -9,6 +9,8 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.Calendars;
 import android.provider.CalendarContract.Events;
@@ -24,6 +26,8 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class CalendarOperations {
 
@@ -47,6 +51,8 @@ public class CalendarOperations {
 
     private Context ctx;
     private Activity activity;
+
+    private ExecutorService executor = Executors.newSingleThreadExecutor();
 
     public CalendarOperations(Activity activity, Context ctx) {
         this.activity = activity; this.ctx = ctx;
@@ -255,8 +261,13 @@ public class CalendarOperations {
 
     private void updateRemindersAndAttendees(ArrayList<CalendarEvent> events) {
         for (CalendarEvent event : events) {
-            getReminders(event);
-            event.setAttendees(getAttendees(event.getEventId()));
+            executor.submit(() -> {
+                getReminders(event);
+                List<CalendarEvent. Attendee> attendees = getAttendees(event.getEventId());
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    event.setAttendees(attendees);
+                });
+            });
         }
     }
 
@@ -413,7 +424,9 @@ public class CalendarOperations {
             while (cur.moveToNext()) {
                 long minutes = cur.getLong(cur.getColumnIndex(CalendarContract.Reminders.MINUTES));
                 Reminder reminder = new CalendarEvent.Reminder(minutes);
-                event.setReminder(reminder);
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    event.setReminder(reminder);
+                });
             }
         } catch (Exception e) {
             Log.e("XXX", e.getMessage());
