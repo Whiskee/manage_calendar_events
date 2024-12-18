@@ -8,6 +8,7 @@ import android.content.ContentValues;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.CalendarContract;
 import android.provider.CalendarContract.Calendars;
 import android.provider.CalendarContract.Events;
@@ -315,13 +316,10 @@ public class CalendarOperations {
         } finally {
             cur.close();
         }
-        ArrayList attendeeList = new ArrayList<>(attendees);
-        Collections.sort(attendeeList, new Comparator<CalendarEvent.Attendee>() {
-            @Override
-            public int compare(CalendarEvent.Attendee o1, CalendarEvent.Attendee o2) {
-                return o1.getEmailAddress().compareTo(o2.getEmailAddress());
-            }
-        });
+        ArrayList<CalendarEvent.Attendee> attendeeList = new ArrayList<>(attendees);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            Collections.sort(attendeeList, Comparator.comparing(CalendarEvent.Attendee::getEmailAddress));
+        }
         if (organiser != null && !attendeeList.isEmpty())
             attendeeList.add(0, organiser);
 
