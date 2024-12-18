@@ -2,9 +2,9 @@ package com.fantastic.manage_calendar_events;
 
 import android.Manifest.permission;
 import android.app.Activity;
-import android.content.Context;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
@@ -185,7 +185,6 @@ public class CalendarOperations {
         } finally {
             cur.close();
         }
-
         updateRemindersAndAttendees(calendarEvents);
         return calendarEvents;
     }
@@ -358,18 +357,24 @@ public class CalendarOperations {
         ContentValues[] valuesArray = new ContentValues[attendees.size()];
 
         for (int i = 0, attendeesSize = attendees.size(); i < attendeesSize; i++) {
-            CalendarEvent.Attendee attendee = attendees.get(i);
-            ContentValues values = new ContentValues();
-            values.put(CalendarContract.Attendees.EVENT_ID, eventId);
-            values.put(CalendarContract.Attendees.ATTENDEE_NAME, attendee.getName());
-            values.put(CalendarContract.Attendees.ATTENDEE_EMAIL, attendee.getEmailAddress());
-            values.put(CalendarContract.Attendees.ATTENDEE_RELATIONSHIP,
-                    attendee.isOrganiser() ? CalendarContract.Attendees.RELATIONSHIP_ORGANIZER :
-                            CalendarContract.Attendees.RELATIONSHIP_ATTENDEE);
-
+            ContentValues values = getContentValues(eventId, attendees, i);
             valuesArray[i] = values;
         }
-        cr.bulkInsert(CalendarContract.Attendees.CONTENT_URI, valuesArray);
+        new Handler(Looper.getMainLooper()).post(() -> {
+            cr.bulkInsert(CalendarContract.Attendees.CONTENT_URI, valuesArray);
+        });
+    }
+
+    private static ContentValues getContentValues(String eventId, List<CalendarEvent.Attendee> attendees, int i) {
+        CalendarEvent.Attendee attendee = attendees.get(i);
+        ContentValues values = new ContentValues();
+        values.put(CalendarContract.Attendees.EVENT_ID, eventId);
+        values.put(CalendarContract.Attendees.ATTENDEE_NAME, attendee.getName());
+        values.put(CalendarContract.Attendees.ATTENDEE_EMAIL, attendee.getEmailAddress());
+        values.put(CalendarContract.Attendees.ATTENDEE_RELATIONSHIP,
+                attendee.isOrganiser() ? CalendarContract.Attendees.RELATIONSHIP_ORGANIZER :
+                        CalendarContract.Attendees.RELATIONSHIP_ATTENDEE);
+        return values;
     }
 
     public int deleteAttendee(String eventId,
@@ -384,20 +389,16 @@ public class CalendarOperations {
                         + " AND " + CalendarContract.Attendees.ATTENDEE_EMAIL
                         + " = '" + attendee.getEmailAddress() + "'";
 
-        int updCount = ctx.getContentResolver().delete(uri, selection, null);
-        return updCount;
+        return ctx.getContentResolver().delete(uri, selection, null);
     }
 
-    private int deleteAllAttendees(String eventId) {
+    private void deleteAllAttendees(String eventId) {
         if (!hasPermissions()) {
             requestPermissions();
         }
-
         Uri uri = CalendarContract.Attendees.CONTENT_URI;
         String selection = CalendarContract.Attendees.EVENT_ID + " = " + eventId;
-
-        int updCount = ctx.getContentResolver().delete(uri, selection, null);
-        return updCount;
+        ctx.getContentResolver().delete(uri, selection, null);
     }
 
     private void getReminders(CalendarEvent event) {
