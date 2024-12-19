@@ -201,12 +201,10 @@ public class SwiftManageCalendarEventsPlugin: NSObject, FlutterPlugin {
         let selectedCalendar = self.eventStore.calendar(withIdentifier: calendarId)
         let startDate = NSDate(timeIntervalSinceNow: -60 * 60 * 24 * 180)
         let endDate = NSDate(timeIntervalSinceNow: 60 * 60 * 24 * 180)
-        if (selectedCalendar != nil) {
-            let predicate = eventStore.predicateForEvents(withStart: startDate as Date, end: endDate as Date, calendars: [selectedCalendar!])
+        guard let selectedCalendar else { return "[]" }
+        let predicate = eventStore.predicateForEvents(withStart: startDate as Date, end: endDate as Date, calendars: [selectedCalendar])
+        return getEvents(predicate: predicate)
 
-            return getEvents(predicate: predicate)
-        }
-        return "[]"
     }
 
     private func getEventsByDateRange(calendarId: String, startDate: Int64, endDate: Int64) -> String? {
@@ -216,12 +214,10 @@ public class SwiftManageCalendarEventsPlugin: NSObject, FlutterPlugin {
         let selectedCalendar = self.eventStore.calendar(withIdentifier: calendarId)
         let startDate = Date (timeIntervalSince1970: Double(startDate) / 1000.0)
         let endDate = Date (timeIntervalSince1970: Double(endDate) / 1000.0)
-        if (selectedCalendar != nil) {
-            let predicate = eventStore.predicateForEvents(withStart: startDate as Date, end: endDate as Date, calendars: [selectedCalendar!])
+        guard let selectedCalendar else { return "[]" }
+        let predicate = eventStore.predicateForEvents(withStart: startDate as Date, end: endDate as Date, calendars: [selectedCalendar])
 
-            return getEvents(predicate: predicate)
-        }
-        return "[]"
+        return getEvents(predicate: predicate)
     }
 
     private func getEvents(predicate: NSPredicate) -> String? {
@@ -297,31 +293,33 @@ public class SwiftManageCalendarEventsPlugin: NSObject, FlutterPlugin {
             //                return
             //            }
         }
-
-        ekEvent!.title = title
-        ekEvent!.notes = description
-        ekEvent!.startDate = startDate
-        ekEvent!.endDate = endDate
-        ekEvent!.calendar = ekCalendar!
-        ekEvent!.isAllDay = isAllDay
+        guard var ekEvent else {
+            return
+        }
+        ekEvent.title = title
+        ekEvent.notes = description
+        ekEvent.startDate = startDate
+        ekEvent.endDate = endDate
+        ekEvent.calendar = ekCalendar!
+        ekEvent.isAllDay = isAllDay
 
         if(location != nil) {
-            ekEvent!.location = location
+            ekEvent.location = location
         }
 
         if(url != nil) {
-            ekEvent!.url = URL(string: url ?? "")
+            ekEvent.url = URL(string: url ?? "")
         }
 
 
         if(reminder != nil) {
             let alarm = EKAlarm.init(absoluteDate: Date.init(timeInterval: 1800, since: Date (timeIntervalSince1970: Double(event.startDate) / 1000.0)))
-            ekEvent!.addAlarm(alarm)
+            ekEvent.addAlarm(alarm)
         }
 
         do {
-            try self.eventStore.save(ekEvent!, span: .futureEvents)
-            event.eventId = ekEvent!.eventIdentifier
+            try self.eventStore.save(ekEvent, span: .futureEvents)
+            event.eventId = ekEvent.eventIdentifier
         } catch {
             self.eventStore.reset()
         }
@@ -343,16 +341,16 @@ public class SwiftManageCalendarEventsPlugin: NSObject, FlutterPlugin {
         if(!hasPermissions()) {
             requestPermissions()
         }
-        let ekEvent = self.eventStore.event(withIdentifier: eventId)
-        if (!ekEvent!.hasAttendees) {
+        guard let ekEvent = self.eventStore.event(withIdentifier: eventId) else { return [] }
+        if (!ekEvent.hasAttendees) {
             return []
         }
 
-        let attendeesList = ekEvent!.attendees
+        let attendeesList = ekEvent.attendees ?? []
         var attendees = [Attendee]()
         var organiser: Attendee?
-        for attendeeElement in attendeesList! {
-            let isOrganiser = ekEvent!.organizer?.emailAddress == attendeeElement.emailAddress!
+        for attendeeElement in attendeesList {
+            let isOrganiser = ekEvent.organizer?.emailAddress == attendeeElement.emailAddress
 
             let existingAttendee = attendees.first { element in
                 return element.emailAddress == attendeeElement.emailAddress
@@ -361,17 +359,17 @@ public class SwiftManageCalendarEventsPlugin: NSObject, FlutterPlugin {
                 continue
             }
 
-            let attendee = Attendee(name: attendeeElement.name, emailAddress: attendeeElement.emailAddress!, isOrganiser: isOrganiser)
+            let attendee = Attendee(name: attendeeElement.name, emailAddress: attendeeElement.emailAddress ?? "", isOrganiser: isOrganiser)
             if(isOrganiser) {
                 organiser = attendee
             } else {
                 attendees.append(attendee)
             }
         }
-        attendees = attendees.sorted { ($0.name == nil ? "" : $0.name!) < ($1.name == nil ? "" : $1.name!) }
+        attendees = attendees.sorted { ($0.name == nil ? "" : $0.name ?? "") < ($1.name == nil ? "" : $1.name ?? "") }
 
-        if organiser != nil && !attendees.isEmpty {
-            attendees.insert(organiser!, at: 0)
+        if let organiser, !attendees.isEmpty {
+            attendees.insert(organiser, at: 0)
         }
         return attendees
     }
@@ -380,7 +378,7 @@ public class SwiftManageCalendarEventsPlugin: NSObject, FlutterPlugin {
         if(!hasPermissions()) {
             requestPermissions()
         }
-        let ekEvent = self.eventStore.event(withIdentifier: eventId)
+        guard let ekEvent = self.eventStore.event(withIdentifier: eventId) else { return }
         let attendeesArguments = arguments["attendees"] as! NSArray
         var attendees = Set<EKParticipant>()
 
@@ -401,20 +399,20 @@ public class SwiftManageCalendarEventsPlugin: NSObject, FlutterPlugin {
         }
 
         // include existing attendees to the new list (to avoid override)
-        if (ekEvent!.hasAttendees) {
-            let attendeesList = ekEvent!.attendees
-            for attendeeElement in attendeesList! {
+        if (ekEvent.hasAttendees) {
+            let attendeesList = ekEvent.attendees ?? []
+            for attendeeElement in attendeesList {
                 let existingAttendee = attendees.first { element in
                     return element.emailAddress == attendeeElement.emailAddress
                 }
                 if existingAttendee != nil {
-                    if ekEvent!.organizer?.emailAddress == attendeeElement.emailAddress {
+                    if ekEvent.organizer?.emailAddress == attendeeElement.emailAddress {
                         attendees.insert(existingAttendee!)
                     }
                     continue
                 }
 
-                let attendee = self.createEKParticipant(name: attendeeElement.name!, emailAddress: attendeeElement.emailAddress!, isOrganiser: attendeeElement.isCurrentUser)
+                let attendee = self.createEKParticipant(name: attendeeElement.name ?? "", emailAddress: attendeeElement.emailAddress ?? "", isOrganiser: attendeeElement.isCurrentUser)
 
                 if(attendee == nil) {
                     continue
@@ -424,10 +422,10 @@ public class SwiftManageCalendarEventsPlugin: NSObject, FlutterPlugin {
             }
         }
 
-        ekEvent!.setValue(Array(attendees), forKey: "attendees")
+        ekEvent.setValue(Array(attendees), forKey: "attendees")
 
         do {
-            try self.eventStore.save(ekEvent!, span: .futureEvents)
+            try self.eventStore.save(ekEvent, span: .futureEvents)
         } catch {
             self.eventStore.reset()
         }
@@ -449,27 +447,26 @@ public class SwiftManageCalendarEventsPlugin: NSObject, FlutterPlugin {
         if(!hasPermissions()) {
             requestPermissions()
         }
-        let attendeesMap = arguments["attendee"] as! Dictionary<String, AnyObject>
-        let ekEvent = self.eventStore.event(withIdentifier: eventId)
+        guard let attendeesMap = arguments["attendee"] as? Dictionary<String, AnyObject> else { return }
+        guard let ekEvent = self.eventStore.event(withIdentifier: eventId) else { return }
 
-        if !(ekEvent!.hasAttendees) {
+        if !(ekEvent.hasAttendees) {
             return
         }
-        let emailAddress = attendeesMap["emailAddress"] as! String
+        guard let emailAddress = attendeesMap["emailAddress"] as? String else { return }
 
-        var attendees = ekEvent!.attendees!
-        let foundIndex = attendees.firstIndex { element in
+        var attendees = ekEvent.attendees ?? []
+        guard let foundIndex = attendees.firstIndex(where: { element in
             return element.emailAddress == emailAddress
-        }
-        if foundIndex == nil {
+        }) else {
             return
         }
-        attendees.remove(at: foundIndex!)
+        attendees.remove(at: foundIndex)
 
-        ekEvent!.setValue(attendees, forKey: "attendees")
+        ekEvent.setValue(attendees, forKey: "attendees")
 
         do {
-            try self.eventStore.save(ekEvent!, span: .futureEvents)
+            try self.eventStore.save(ekEvent, span: .futureEvents)
         } catch {
             self.eventStore.reset()
         }
@@ -479,14 +476,14 @@ public class SwiftManageCalendarEventsPlugin: NSObject, FlutterPlugin {
         if(!hasPermissions()) {
             requestPermissions()
         }
-        let ekEvent = self.eventStore.event(withIdentifier: eventId)
+        guard let ekEvent = self.eventStore.event(withIdentifier: eventId) else { return }
         let seconds = self.minutesToSeconds(minutes: reminder.minutes)
 
         let alarm = EKAlarm.init(relativeOffset: seconds)
-        ekEvent!.addAlarm(alarm)
+        ekEvent.addAlarm(alarm)
 
         do {
-            try self.eventStore.save(ekEvent!, span: .futureEvents)
+            try self.eventStore.save(ekEvent, span: .futureEvents)
         } catch {
             self.eventStore.reset()
         }
@@ -506,14 +503,14 @@ public class SwiftManageCalendarEventsPlugin: NSObject, FlutterPlugin {
         if(!hasPermissions()) {
             requestPermissions()
         }
-        let ekEvent = self.eventStore.event(withIdentifier: eventId)
-        if(!ekEvent!.hasAlarms) {
+        guard let ekEvent = self.eventStore.event(withIdentifier: eventId) else { return false }
+        if(!ekEvent.hasAlarms) {
             return false
         }
-        ekEvent!.removeAlarm(ekEvent!.alarms![0])
+        ekEvent.removeAlarm(ekEvent.alarms![0])
 
         do {
-            try self.eventStore.save(ekEvent!, span: .futureEvents)
+            try self.eventStore.save(ekEvent, span: .futureEvents)
         } catch {
             self.eventStore.reset()
         }
